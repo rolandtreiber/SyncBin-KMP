@@ -2,8 +2,9 @@
 
 This is a KMP mobile application.
 
-![images/ios.png](images/ios.png)
-![images/android.jpg](images/android.jpg)
+|                iOS                |                  Android                  |
+|:---------------------------------:|:-----------------------------------------:|
+| ![images/ios.png](images/ios.png) | ![images/android.jpg](images/android.jpg) |
 
 ## The core functionality
 SyncBin allows real-time sharing of text and files across multiple devices and platforms.
