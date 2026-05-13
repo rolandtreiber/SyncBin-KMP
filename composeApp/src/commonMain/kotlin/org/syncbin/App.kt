@@ -268,7 +268,7 @@ fun App() {
                     ) {
                         Box(modifier = Modifier.padding(16.dp)) {
                             QrCodeImage(
-                                value = state.sessionId,
+                                value = "${FirebaseConfig.shareBaseUrl}${state.sessionId}",
                                 modifier = Modifier.size(220.dp),
                             )
                         }

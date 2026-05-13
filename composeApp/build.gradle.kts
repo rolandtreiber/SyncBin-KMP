@@ -63,11 +63,11 @@ kotlin {
 }
 
 android {
-    namespace = "org.syncbin"
+    namespace = "org.fluentech.syncbin"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "org.syncbin"
+        applicationId = "org.fluentech.syncbin"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
