@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,11 +54,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import syncbin.composeapp.generated.resources.Res
+import syncbin.composeapp.generated.resources.copy
+import syncbin.composeapp.generated.resources.plus
+import syncbin.composeapp.generated.resources.qr
+import syncbin.composeapp.generated.resources.scan
 import syncbin.composeapp.generated.resources.syncbin_logo
 
 private val AccentColor = Color(0xFFA5F500)
@@ -261,7 +268,7 @@ fun App() {
                     ) {
                         Box(modifier = Modifier.padding(16.dp)) {
                             QrCodeImage(
-                                value = "${FirebaseConfig.shareBaseUrl}${state.sessionId}",
+                                value = state.sessionId,
                                 modifier = Modifier.size(220.dp),
                             )
                         }
@@ -318,10 +325,10 @@ private fun SessionHeader(
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
-            HeaderAction("+", "Save", onSaveSession)
-            HeaderAction("⧉", "Copy", onCopySession)
-            HeaderAction("▦", "Show QR", onShowQr)
-            HeaderAction("⌁", "Scan QR", onScanQr)
+            HeaderAction(Res.drawable.plus, "Save session ID", onSaveSession)
+            HeaderAction(Res.drawable.copy, "Copy session code", onCopySession)
+            HeaderAction(Res.drawable.qr, "Show QR code for session", onShowQr)
+            HeaderAction(Res.drawable.scan, "Scan session QR code", onScanQr)
         }
     }
 }
@@ -359,16 +366,16 @@ private fun SessionInput(
 
 @Composable
 private fun HeaderAction(
-    symbol: String,
+    icon: DrawableResource,
     contentDescription: String,
     onClick: () -> Unit,
 ) {
     IconButton(onClick = onClick) {
-        Text(
-            text = symbol,
-            color = AccentColor,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleLarge,
+        Image(
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
+            colorFilter = ColorFilter.tint(AccentColor),
+            modifier = Modifier.size(24.dp),
         )
     }
 }

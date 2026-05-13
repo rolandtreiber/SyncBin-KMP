@@ -152,7 +152,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\n\nANDROID_STUDIO_JBR=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nif [ -n \"$SYNCBIN_JAVA_HOME\" ]; then\n  export JAVA_HOME=\"$SYNCBIN_JAVA_HOME\"\nelif [ -x \"$ANDROID_STUDIO_JBR/bin/java\" ]; then\n  export JAVA_HOME=\"$ANDROID_STUDIO_JBR\"\nelif [ -z \"$JAVA_HOME\" ]; then\n  JAVA_HOME_FROM_SYSTEM=\"$(/usr/libexec/java_home 2>/dev/null || true)\"\n  if [ -n \"$JAVA_HOME_FROM_SYSTEM\" ]; then\n    export JAVA_HOME=\"$JAVA_HOME_FROM_SYSTEM\"\n  else\n    echo \"error: Unable to locate a Java runtime. Install a JDK or Android Studio, then retry the build.\"\n    exit 1\n  fi\nfi\n\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\necho \"Using JAVA_HOME=$JAVA_HOME\"\n\ncd \"$SRCROOT/..\"\n./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
