@@ -6,11 +6,10 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
-import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import io.ktor.serialization.kotlinx.json.json
@@ -20,6 +19,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.Json
 
 private val jsonFormat = Json {
@@ -38,18 +42,22 @@ class SessionRepository(
     fun observeSession(sessionId: String): Flow<SessionPayload> = flow {
         var previous: SessionPayload? = null
         while (currentCoroutineContext().isActive) {
-            val current = fetchSession(sessionId)
-            if (current != previous) {
-                emit(current)
-                previous = current
-            }
-            delay(1_000)
+            runCatching { fetchSession(sessionId) }
+                .onSuccess { current ->
+                    if (current != previous) {
+                        emit(current)
+                        previous = current
+                    }
+                }
+                .onFailure {
+                    delay(1_000)
+                }
+            delay(250)
         }
     }
 
     suspend fun updateText(sessionId: String, text: String) {
-        val current = fetchSession(sessionId)
-        writeSession(sessionId, current.copy(text = text))
+        patchSession(sessionId, buildJsonObject { put("text", text) })
     }
 
     suspend fun uploadFile(sessionId: String, file: PickedFile) {
@@ -63,13 +71,13 @@ class SessionRepository(
         }
         val current = fetchSession(sessionId)
         val nextFiles = (current.files + file.name).distinct()
-        writeSession(sessionId, current.copy(files = nextFiles))
+        updateFiles(sessionId, nextFiles)
     }
 
     suspend fun deleteFile(sessionId: String, fileName: String) {
         client.delete("${storageObjectsUrl()}/${storagePath(sessionId, fileName)}")
         val current = fetchSession(sessionId)
-        writeSession(sessionId, current.copy(files = current.files.filterNot { it == fileName }))
+        updateFiles(sessionId, current.files.filterNot { it == fileName })
     }
 
     fun publicFileUrl(sessionId: String, fileName: String): String {
@@ -85,10 +93,21 @@ class SessionRepository(
         return jsonFormat.decodeFromString(SessionPayload.serializer(), body)
     }
 
-    private suspend fun writeSession(sessionId: String, payload: SessionPayload) {
-        client.put("${FirebaseConfig.databaseUrl}/$sessionId.json") {
+    private suspend fun updateFiles(sessionId: String, files: List<String>) {
+        patchSession(
+            sessionId = sessionId,
+            payload = buildJsonObject {
+                putJsonArray("files") {
+                    files.forEach { add(JsonPrimitive(it)) }
+                }
+            },
+        )
+    }
+
+    private suspend fun patchSession(sessionId: String, payload: JsonObject) {
+        client.patch("${FirebaseConfig.databaseUrl}/$sessionId.json") {
             contentType(ContentType.Application.Json)
-            setBody(jsonFormat.encodeToString(SessionPayload.serializer(), payload))
+            setBody(jsonFormat.encodeToString(JsonObject.serializer(), payload))
         }
     }
 

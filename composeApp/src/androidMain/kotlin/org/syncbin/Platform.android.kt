@@ -25,6 +25,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import io.ktor.serialization.kotlinx.json.json
+import org.fluentech.syncbin.BuildConfig
 
 actual class PlatformContext(
     val context: Context,
@@ -32,6 +33,7 @@ actual class PlatformContext(
 
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
+    override val appVersion: String = BuildConfig.VERSION_NAME
 }
 
 actual fun getPlatform(): Platform = AndroidPlatform()
@@ -53,7 +55,7 @@ private class AndroidSessionStore(
     }
 
     override fun saveCurrentSessionId(sessionId: String) {
-        preferences.edit().putString("current_session_id", sessionId).apply()
+        preferences.edit().putString("current_session_id", sessionId).commit()
     }
 
     override fun loadQuickAccess(): List<String> {

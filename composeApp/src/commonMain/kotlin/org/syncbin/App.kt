@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -50,18 +52,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import syncbin.composeapp.generated.resources.Res
 import syncbin.composeapp.generated.resources.copy
+import syncbin.composeapp.generated.resources.info
 import syncbin.composeapp.generated.resources.plus
 import syncbin.composeapp.generated.resources.qr
 import syncbin.composeapp.generated.resources.scan
@@ -158,6 +169,13 @@ fun App() {
         val state by controller.state.collectAsState()
         val snackbarHostState = remember { SnackbarHostState() }
 
+        LifecycleStartEffect(controller) {
+            controller.onAppForegrounded()
+            onStopOrDispose {
+                controller.onAppBackgrounded()
+            }
+        }
+
         LaunchedEffect(state.message) {
             val message = state.message ?: return@LaunchedEffect
             snackbarHostState.showSnackbar(message)
@@ -189,6 +207,7 @@ fun App() {
                         bridge.copyText("${FirebaseConfig.shareBaseUrl}${state.sessionId}")
                         controller.consumeMessage()
                     },
+                    onShowInfo = controller::showInfoSheet,
                     onShowQr = controller::showQrSheet,
                     onScanQr = bridge::scanQrCode,
                 )
@@ -284,6 +303,15 @@ fun App() {
                 }
             }
         }
+
+        if (state.infoSheetVisible) {
+            ModalBottomSheet(
+                onDismissRequest = controller::dismissInfoSheet,
+                containerColor = colors.surfaceBackground,
+            ) {
+                AboutSyncBinSheet(colors = colors)
+            }
+        }
     }
 }
 
@@ -294,6 +322,7 @@ private fun SessionHeader(
     onSessionIdChange: (String) -> Unit,
     onSaveSession: () -> Unit,
     onCopySession: () -> Unit,
+    onShowInfo: () -> Unit,
     onShowQr: () -> Unit,
     onScanQr: () -> Unit,
 ) {
@@ -307,10 +336,16 @@ private fun SessionHeader(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            androidx.compose.foundation.Image(
+            Image(
                 painter = painterResource(Res.drawable.syncbin_logo),
                 contentDescription = "SyncBin logo",
                 modifier = Modifier.width(160.dp),
+            )
+            HeaderAction(
+                icon = Res.drawable.info,
+                contentDescription = "About SyncBin",
+                onClick = onShowInfo,
+                modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
         Spacer(Modifier.height(10.dp))
@@ -340,10 +375,20 @@ private fun SessionInput(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val dismissKeyboard = {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        Unit
+    }
+
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { dismissKeyboard() }),
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.titleColor),
         singleLine = true,
         decorationBox = { innerTextField ->
@@ -369,13 +414,155 @@ private fun HeaderAction(
     icon: DrawableResource,
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onClick) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier,
+    ) {
         Image(
             painter = painterResource(icon),
             contentDescription = contentDescription,
             colorFilter = ColorFilter.tint(AccentColor),
             modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+@Composable
+private fun AboutSyncBinSheet(colors: SyncBinColors) {
+    val uriHandler = LocalUriHandler.current
+    val webUrl = "https://syncbin.co.uk"
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+    ) {
+        Text(
+            text = "About SyncBin",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "SyncBin is your companion if you want to drop text and files between devices without the hassle of maintaining another account. It works between the web, Android and iOS devices.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Access your session on the web:",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = webUrl,
+            modifier = Modifier.clickable { uriHandler.openUri(webUrl) },
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = AccentColor,
+        )
+        Spacer(Modifier.height(20.dp))
+        AboutSectionTitle("Best use cases", colors)
+        AboutBullet("Drop a snippet of text or file from a windows machine to a linux one without sending an email or setting up google drive on both", colors)
+        AboutBullet("Drop a file to a restricted machine without configuring an account there", colors)
+        AboutBullet("Allow a group to download a photo one member took", colors)
+        AboutBullet("Quickly share something with people without any context and without leaving a trace", colors)
+        Spacer(Modifier.height(18.dp))
+        AboutSectionTitle("What NOT to use SyncBin for", colors)
+        AboutBullet("Long term storage", colors)
+        AboutBullet("Storing sensitive information", colors)
+        AboutBullet("As a single source of truth", colors)
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "Everyone accessing the session is allowed to make changes to the session text field and files.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Once a file is deleted from a session, it is gone for good.",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Once the text is modified, there is no undo.",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Sessions aren't encrypted. SyncBin excels in simplicity, not security. Do not share sensitive information in your sessions.",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = "Secure sessions coming soon!",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "For early access, contact: hello@thecaringdeveloper.com",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.titleColor,
+        )
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = "Version ${getPlatform().appVersion}",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.titleColor.copy(alpha = 0.65f),
+        )
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun AboutSectionTitle(
+    title: String,
+    colors: SyncBinColors,
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = colors.titleColor,
+    )
+    Spacer(Modifier.height(8.dp))
+}
+
+@Composable
+private fun AboutBullet(
+    text: String,
+    colors: SyncBinColors,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = "-",
+            color = colors.titleColor,
+            modifier = Modifier.width(14.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.titleColor,
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -435,18 +622,42 @@ private fun EditorContent(
     onOpenPreview: (String) -> Unit,
     onDownloadFile: (String) -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var textEditorFocused by remember { mutableStateOf(false) }
+    val dismissKeyboard = {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        Unit
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(12.dp),
     ) {
-        Text(
-            text = "Text",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.titleColor,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Text",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.titleColor,
+            )
+            if (textEditorFocused) {
+                AssistChip(
+                    onClick = dismissKeyboard,
+                    label = { Text("Done", color = AccentColor) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = colors.actionButtonBackground,
+                    ),
+                )
+            }
+        }
         Spacer(Modifier.height(8.dp))
         BasicTextField(
             value = state.text,
@@ -454,6 +665,7 @@ private fun EditorContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(260.dp)
+                .onFocusChanged { textEditorFocused = it.isFocused }
                 .border(1.dp, colors.textFieldBorder, RoundedCornerShape(10.dp))
                 .background(colors.textFieldBackground, RoundedCornerShape(10.dp))
                 .padding(12.dp),
@@ -483,7 +695,10 @@ private fun EditorContent(
                 color = colors.titleColor,
             )
             Button(
-                onClick = onPickFile,
+                onClick = {
+                    dismissKeyboard()
+                    onPickFile()
+                },
                 enabled = !state.busy,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = colors.actionButtonBackground,

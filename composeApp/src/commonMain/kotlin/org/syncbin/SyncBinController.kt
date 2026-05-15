@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,7 @@ data class SyncBinUiState(
     val previewFileName: String? = null,
     val previewSheetVisible: Boolean = false,
     val qrSheetVisible: Boolean = false,
+    val infoSheetVisible: Boolean = false,
     val busy: Boolean = false,
     val message: String? = null,
 )
@@ -43,14 +45,33 @@ class SyncBinController(
     val state: StateFlow<SyncBinUiState> = _state.asStateFlow()
 
     private var sessionObservationJob: Job? = null
+    private var sessionObservationActive = false
+    private var textSyncJob: Job? = null
+    private var pendingTextSessionId: String? = null
+    private var pendingText: String? = null
 
     init {
+        store.saveCurrentSessionId(_state.value.sessionId)
         updateSessionVisibility()
+    }
+
+    fun onAppForegrounded() {
+        sessionObservationActive = true
         observeSession(_state.value.sessionId)
+    }
+
+    fun onAppBackgrounded() {
+        sessionObservationActive = false
+        flushPendingText()
+        sessionObservationJob?.cancel()
+        sessionObservationJob = null
     }
 
     fun onSessionIdChanged(rawValue: String) {
         val normalized = normalizeSessionId(rawValue)
+        textSyncJob?.cancel()
+        pendingTextSessionId = null
+        pendingText = null
         _state.update {
             it.copy(
                 sessionId = normalized,
@@ -60,7 +81,9 @@ class SyncBinController(
         }
         store.saveCurrentSessionId(normalized)
         updateSessionVisibility()
-        observeSession(normalized)
+        if (sessionObservationActive) {
+            observeSession(normalized)
+        }
     }
 
     fun onQuickAccessSelected(sessionId: String) {
@@ -83,8 +106,18 @@ class SyncBinController(
     fun onTextChanged(text: String) {
         _state.update { it.copy(text = text) }
         val sessionId = state.value.sessionId
-        scope.launch {
+        pendingTextSessionId = sessionId
+        pendingText = text
+        textSyncJob?.cancel()
+        textSyncJob = scope.launch {
+            delay(120)
             runCatching { repository.updateText(sessionId, text) }
+                .onSuccess {
+                    if (pendingTextSessionId == sessionId && pendingText == text) {
+                        pendingTextSessionId = null
+                        pendingText = null
+                    }
+                }
                 .onFailure { showMessage("Failed to sync text") }
         }
     }
@@ -134,6 +167,14 @@ class SyncBinController(
         _state.update { it.copy(qrSheetVisible = false) }
     }
 
+    fun showInfoSheet() {
+        _state.update { it.copy(infoSheetVisible = true) }
+    }
+
+    fun dismissInfoSheet() {
+        _state.update { it.copy(infoSheetVisible = false) }
+    }
+
     fun handleScannedSession(rawValue: String) {
         onSessionIdChanged(rawValue)
         showMessage("Session loaded from QR code")
@@ -149,11 +190,31 @@ class SyncBinController(
             repository.observeSession(sessionId).collectLatest { session ->
                 _state.update {
                     it.copy(
-                        text = session.text,
+                        text = if (pendingTextSessionId == sessionId && pendingText != null) {
+                            it.text
+                        } else {
+                            session.text
+                        },
                         files = session.files,
                     )
                 }
             }
+        }
+    }
+
+    private fun flushPendingText() {
+        val sessionId = pendingTextSessionId ?: return
+        val text = pendingText ?: return
+        textSyncJob?.cancel()
+        textSyncJob = scope.launch {
+            runCatching { repository.updateText(sessionId, text) }
+                .onSuccess {
+                    if (pendingTextSessionId == sessionId && pendingText == text) {
+                        pendingTextSessionId = null
+                        pendingText = null
+                    }
+                }
+                .onFailure { showMessage("Failed to sync text") }
         }
     }
 
